@@ -1,92 +1,103 @@
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
+from fpdf import FPDF
+import sqlite3
 
-def gerar_pdf(dados_aluno):
-    pdf = SimpleDocTemplate("registro_aluno.pdf", pagesize=A4)
-    elementos = []
+# -------------------- BUSCAR DADOS DO BANCO --------------------
+def buscar_todos():
+    con = sqlite3.connect("alunos.db")
+    cur = con.cursor()
+    cur.execute("SELECT * FROM alunos")
+    linhas = cur.fetchall()
+    con.close()
 
-    styles = getSampleStyleSheet()
-    normal = styles["Normal"]
-    titulo = styles["Title"]
-
-    # LOGO DA EMPRESA
-    try:
-        logo = Image("logo.png", width=100, height=100)
-        elementos.append(logo)
-    except:
-        elementos.append(Paragraph("LOGO NÃO ENCONTRADA", titulo))
-
-    elementos.append(Spacer(1, 20))
-
-    elementos.append(Paragraph("LIVRO DE REGISTRO DE DIPLOMA – CURSOS TÉCNICOS", titulo))
-    elementos.append(Spacer(1, 10))
-
-    tabela_dados = [
-        [f"Livro: {dados_aluno['livro']}",
-         f"Registro nº {dados_aluno['registro']}",
-         f"Data de Registro: {dados_aluno['data_registro']}"],
-
-        [f"Turma/Curso: {dados_aluno['curso']}",
-         f"Conclusão: {dados_aluno['conclusao']}", ""],
-
-        [f"Aluno: {dados_aluno['nome']}",
-         f"Data de Nascimento: {dados_aluno['nascimento']}", ""],
-
-        [f"Nacionalidade: {dados_aluno['nacionalidade']}",
-         f"Naturalidade: {dados_aluno['naturalidade']}",
-         f"UF: {dados_aluno['uf']}"],
-
-        [f"Identidade: {dados_aluno['rg']}",
-         f"Expedidor: {dados_aluno['orgao']}",
-         f"Data Expedição: {dados_aluno['data_rg']}"],
-
-        [f"CPF: {dados_aluno['cpf']}", "", ""]
+    colunas = [
+        "id", "livro", "registro", "data_registro", "curso", "conclusao", "nome", "nascimento",
+        "nacionalidade", "naturalidade", "uf", "rg", "orgao", "data_rg",
+        "cpf", "secretaria"
     ]
 
-    tabela = Table(tabela_dados, colWidths=[180, 180, 150])
-    tabela.setStyle(TableStyle([
-        ('FONT', (0,0), (-1,-1), 'Helvetica', 10),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-    ]))
+    return [dict(zip(colunas, linha)) for linha in linhas]
 
-    elementos.append(tabela)
-    elementos.append(Spacer(1, 20))
 
-    elementos.append(Paragraph("Observações:", normal))
-    elementos.append(Spacer(1, 10))
-    elementos.append(Paragraph("Recebi originais em ___/___/_____  Assinatura do Aluno (a) ________________________________", normal))
+# -------------------- CLASSE PDF PERSONALIZADA --------------------
+class PDF(FPDF):
 
-    elementos.append(Spacer(1, 30))
+    def header(self):
 
-    elementos.append(Paragraph(dados_aluno["secretaria"], normal))
-    elementos.append(Paragraph("Secretaria Escolar", normal))
-    elementos.append(Paragraph("Colégio Integrado Polivalente", normal))
-    elementos.append(Paragraph("Brasília - DF", normal))
+        # Título SENAC
+        self.set_font("Noto", "B", 14)
+        self.cell(
+            0, 10,
+            "LIVRO DE REGISTRO DE DIPLOMA – CURSOS TÉCNICOS SENAC SOBRADINHO",
+            new_x="LMARGIN", new_y="NEXT", align="C"
+        )
 
-    pdf.build(elementos)
-    print("PDF criado com sucesso!")
+        # Página
+        self.set_font("Noto", "", 11)
+        self.cell(0, 8, "Página 210", new_x="LMARGIN", new_y="NEXT")
+        self.ln(4)
 
-# EXEMPLO DE DADOS
-dados = {
-    "livro": "03",
-    "registro": "1203 / 65E3E883",
-    "data_registro": "27/08/2025",
-    "curso": "2022.11.14 - TÉCNICO EM ADMINISTRAÇÃO",
-    "conclusao": "28/11/2024",
-    "nome": "Maria Alves Silva",
-    "nascimento": "01/01/2000",
-    "nacionalidade": "Brasileira",
-    "naturalidade": "SOBRADINHO",
-    "uf": "DF",
-    "rg": "11111-00",
-    "orgao": "SESP/DF",
-    "data_rg": "01/01/2010",
-    "cpf": "000.000.000-00",
-    "secretaria": "Bruna de Oliveira Macedo Pires (Reg nº 2213)"
-}
+    def bloco_registro(self, dados, y):
 
-gerar_pdf(dados)
+        ALTURA_BLOCO = 72
+        LARGURA_BLOCO = 175
+        X_INICIO = 17
+
+        self.set_line_width(0.5)
+        self.rect(X_INICIO, y, LARGURA_BLOCO, ALTURA_BLOCO)
+
+        self.set_xy(X_INICIO + 3, y + 3)
+        self.set_font("Noto", "", 10)
+
+        linhas = [
+            f"Livro: {dados['livro']}     Registro nº {dados['registro']}     Data de Registro: {dados['data_registro']}",
+            f"Turma/Curso: {dados['curso']}     Conclusão: {dados['conclusao']}",
+            f"Aluno: {dados['nome']}     Data de Nascimento: {dados['nascimento']}",
+            f"Nacionalidade: {dados['nacionalidade']}     Naturalidade: {dados['naturalidade']}     UF: {dados['uf']}",
+            f"Identidade: {dados['rg']}     Expedidor: {dados['orgao']}     Data Expedição: {dados['data_rg']}",
+            f"CPF: {dados['cpf']}",
+            "",
+            f"{dados['secretaria']}",
+            "Secretaria Escolar Reg nº 2213",
+            "Colégio Integrado Polivalente",
+            "Brasília - DF",
+            "",
+            "Observações:",
+            "Recebi originais em ___/___/_____     Assinatura do Aluno(a) ____________________________",
+        ]
+
+        for linha in linhas:
+            self.cell(0, 5, linha, new_x="LMARGIN", new_y="NEXT")
+
+        return y + ALTURA_BLOCO + 10
+
+
+# -------------------- GERAR PDF FINAL --------------------
+def gerar_pdf():
+
+    alunos = buscar_todos()
+
+    pdf = PDF("P", "mm", "A4")
+
+    # Registrar fontes Unicode
+    pdf.add_font("Noto", "", "fonts/NotoSans-Regular.ttf")
+    pdf.add_font("Noto", "B", "fonts/NotoSans-Bold.ttf")
+
+    pdf.alias_nb_pages()
+    pdf.add_page()
+
+    y = 40
+    contador = 0
+
+    for a in alunos:
+        y = pdf.bloco_registro(a, y)
+        contador += 1
+
+        if contador % 3 == 0:
+            pdf.add_page()
+            y = 40
+
+    pdf.output("registro_fpdf2.pdf")
+    print("PDF gerado com sucesso usando FPDF2!")
+
+
+gerar_pdf()
